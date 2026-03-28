@@ -5,7 +5,7 @@ import (
 	"os"
 	"reflect"
 
-	"github.com/dehwyy/configfx"
+	"github.com/dehwyy/configfx/config"
 	"github.com/dehwyy/configfx/internal/env"
 	"github.com/dehwyy/configfx/vault"
 )
@@ -46,8 +46,8 @@ func printEnvValidation[C any]() int {
 	}
 
 	errCount := 0
-	envErrors := configfx.Validate[C]()
-	errMap := make(map[string]configfx.ValidationError, len(envErrors))
+	envErrors := config.Validate[C]()
+	errMap := make(map[string]config.ValidationError, len(envErrors))
 	for _, e := range envErrors {
 		errMap[e.EnvKey] = e
 		errCount++

@@ -181,5 +181,5 @@ configfx/
 
 ## Requirements
 
-- Go 1.24+
+- Go 1.25.5+
 - Vault KV v1 (not KV v2)

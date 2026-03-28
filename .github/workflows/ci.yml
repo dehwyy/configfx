@@ -23,3 +23,31 @@ jobs:
 
       - name: go test
         run: go test ./...
+
+  release:
+    name: Bump version
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          fetch-depth: 0
+
+      - name: Bump patch version and push tag
+        run: |
+          LATEST=$(git tag --sort=-v:refname | grep '^v[0-9]' | head -1)
+          if [ -z "$LATEST" ]; then
+            NEW="v0.0.1"
+          else
+            MAJOR=$(echo "$LATEST" | cut -d. -f1 | tr -d v)
+            MINOR=$(echo "$LATEST" | cut -d. -f2)
+            PATCH=$(echo "$LATEST" | cut -d. -f3)
+            NEW="v${MAJOR}.${MINOR}.$((PATCH + 1))"
+          fi
+          echo "Tagging $NEW"
+          git tag "$NEW"
+          git push origin "$NEW"

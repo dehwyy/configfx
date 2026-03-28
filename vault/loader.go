@@ -14,13 +14,16 @@ type pathKey struct {
 	path  string
 }
 
-// Load reads Vault KV v1 secrets into T using vault struct tags.
+// Load reads Vault KV secrets into T using vault struct tags.
 // addr: Vault address (e.g. "https://vault.dev.uniteplat.org")
 // token: Vault token
+// opts: optional LoadOption values (e.g. OptionClientKv2 to use KV v2 API)
 //
 // Strategy: batch reads — collect unique (mount, path) pairs,
 // make one HTTP request per unique path, map fields from response Data map.
-func Load[T any](addr, token string) (*T, error) {
+func Load[T any](addr, token string, opts ...LoadOption) (*T, error) {
+	cfg := newLoadConfig(opts)
+
 	client, err := vaultclient.New(vaultclient.WithAddress(addr))
 	if err != nil {
 		return nil, fmt.Errorf("vault: failed to create client: %w", err)
@@ -64,15 +67,11 @@ func Load[T any](addr, token string) (*T, error) {
 	cache := make(map[pathKey]map[string]any)
 
 	for key := range pathFields {
-		resp, err := client.Secrets.KvV1Read(
-			ctx,
-			key.path,
-			vaultclient.WithMountPath(key.mount),
-		)
+		data, err := readPath(ctx, client, key, cfg.kvVersion)
 		if err != nil {
 			return nil, fmt.Errorf("vault: failed to read %s/%s: %w", key.mount, key.path, err)
 		}
-		cache[key] = resp.Data
+		cache[key] = data
 	}
 
 	for key, refs := range pathFields {
@@ -84,24 +83,80 @@ func Load[T any](addr, token string) (*T, error) {
 				return nil, fmt.Errorf("vault: field %s: key %q not found in %s/%s", fieldName, ref.tag.Field, key.mount, key.path)
 			}
 
-			str, ok := raw.(string)
-			if !ok {
-				return nil, fmt.Errorf("vault: field %s: expected string value, got %T", fieldName, raw)
-			}
-
 			fv := v.Field(ref.index)
 			if !fv.CanSet() {
 				return nil, fmt.Errorf("vault: field %s is not settable", fieldName)
 			}
 
-			if fv.Kind() != reflect.String {
-				return nil, fmt.Errorf("vault: field %s must be string type, got %s", fieldName, fv.Kind())
+			if err := setField(fv, raw, fieldName); err != nil {
+				return nil, err
 			}
-
-			fv.SetString(str)
 		}
 	}
 
 	result := v.Interface().(T)
 	return &result, nil
+}
+
+// readPath performs a KV read and returns the data map.
+func readPath(ctx context.Context, client *vaultclient.Client, key pathKey, kvVersion int) (map[string]any, error) {
+	switch kvVersion {
+	case 2:
+		resp, err := client.Secrets.KvV2Read(ctx, key.path, vaultclient.WithMountPath(key.mount))
+		if err != nil {
+			return nil, err
+		}
+		return resp.Data.Data, nil
+	default: // 1
+		resp, err := client.Secrets.KvV1Read(ctx, key.path, vaultclient.WithMountPath(key.mount))
+		if err != nil {
+			return nil, err
+		}
+		return resp.Data, nil
+	}
+}
+
+// setField maps a raw interface{} value from Vault into a reflect.Value.
+// Supports string, []string, []int (and other int slice variants).
+func setField(fv reflect.Value, raw any, fieldName string) error {
+	switch fv.Kind() {
+	case reflect.String:
+		s, ok := raw.(string)
+		if !ok {
+			return fmt.Errorf("vault: field %s: expected string, got %T", fieldName, raw)
+		}
+		fv.SetString(s)
+
+	case reflect.Slice:
+		arr, ok := raw.([]interface{})
+		if !ok {
+			return fmt.Errorf("vault: field %s: expected array, got %T", fieldName, raw)
+		}
+		elemKind := fv.Type().Elem().Kind()
+		result := reflect.MakeSlice(fv.Type(), len(arr), len(arr))
+		for i, item := range arr {
+			elem := result.Index(i)
+			switch elemKind {
+			case reflect.String:
+				s, ok := item.(string)
+				if !ok {
+					return fmt.Errorf("vault: field %s[%d]: expected string element, got %T", fieldName, i, item)
+				}
+				elem.SetString(s)
+			case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+				n, ok := item.(float64) // JSON numbers decode as float64
+				if !ok {
+					return fmt.Errorf("vault: field %s[%d]: expected number element, got %T", fieldName, i, item)
+				}
+				elem.SetInt(int64(n))
+			default:
+				return fmt.Errorf("vault: field %s: unsupported slice element kind %s", fieldName, elemKind)
+			}
+		}
+		fv.Set(result)
+
+	default:
+		return fmt.Errorf("vault: field %s: unsupported field kind %s (only string and []string/[]int are supported)", fieldName, fv.Kind())
+	}
+	return nil
 }

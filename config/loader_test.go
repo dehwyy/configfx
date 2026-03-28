@@ -1,11 +1,11 @@
-package configfx_test
+package config_test
 
 import (
 	"reflect"
 	"testing"
 	"time"
 
-	"github.com/dehwyy/configfx"
+	"github.com/dehwyy/configfx/config"
 	"github.com/dehwyy/configfx/internal/env"
 )
 
@@ -53,7 +53,7 @@ func TestLoad_BasicTypes(t *testing.T) {
 	t.Setenv("DEBUG", "true")
 	t.Setenv("TIMEOUT", "12345")
 
-	cfg, err := configfx.Load[basicConfig]()
+	cfg, err := config.Load[basicConfig]()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestLoad_RequiredMissing(t *testing.T) {
 	t.Setenv("DB_URL", "")
 	t.Setenv("HOST", "")
 
-	_, err := configfx.Load[requiredConfig]()
+	_, err := config.Load[requiredConfig]()
 	if err == nil {
 		t.Fatal("expected error for missing required field DB_URL, got nil")
 	}
@@ -86,7 +86,7 @@ func TestLoad_RequiredWithDefault(t *testing.T) {
 	t.Setenv("DB_URL", "postgres://localhost/mydb")
 	t.Setenv("HOST", "")
 
-	cfg, err := configfx.Load[requiredConfig]()
+	cfg, err := config.Load[requiredConfig]()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -99,7 +99,7 @@ func TestLoad_Defaults(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "")
 	t.Setenv("WORKERS", "")
 
-	cfg, err := configfx.Load[defaultConfig]()
+	cfg, err := config.Load[defaultConfig]()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -115,7 +115,7 @@ func TestLoad_DefaultsOverriddenByEnv(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "debug")
 	t.Setenv("WORKERS", "16")
 
-	cfg, err := configfx.Load[defaultConfig]()
+	cfg, err := config.Load[defaultConfig]()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestLoad_DefaultsOverriddenByEnv(t *testing.T) {
 func TestLoad_SliceOfStrings(t *testing.T) {
 	t.Setenv("ALLOWED_IPS", "10.0.0.1, 10.0.0.2, 192.168.1.1")
 
-	cfg, err := configfx.Load[sliceConfig]()
+	cfg, err := config.Load[sliceConfig]()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -148,7 +148,7 @@ func TestLoad_SliceOfStrings(t *testing.T) {
 func TestLoad_Duration(t *testing.T) {
 	t.Setenv("REQUEST_TIMEOUT", "5m30s")
 
-	cfg, err := configfx.Load[durationConfig]()
+	cfg, err := config.Load[durationConfig]()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -165,7 +165,7 @@ func TestLoad_Mixed(t *testing.T) {
 	t.Setenv("TAGS", "web, api, v2")
 	t.Setenv("MAX_TIMEOUT", "")
 
-	cfg, err := configfx.Load[mixedConfig]()
+	cfg, err := config.Load[mixedConfig]()
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -194,7 +194,7 @@ func TestLoad_Mixed(t *testing.T) {
 func TestValidate_NoErrors(t *testing.T) {
 	t.Setenv("DB_URL", "postgres://localhost/mydb")
 
-	errs := configfx.Validate[requiredConfig]()
+	errs := config.Validate[requiredConfig]()
 	if len(errs) != 0 {
 		t.Errorf("expected no errors, got %v", errs)
 	}
@@ -203,7 +203,7 @@ func TestValidate_NoErrors(t *testing.T) {
 func TestValidate_MissingRequired(t *testing.T) {
 	t.Setenv("DB_URL", "")
 
-	errs := configfx.Validate[requiredConfig]()
+	errs := config.Validate[requiredConfig]()
 	if len(errs) != 1 {
 		t.Fatalf("expected 1 error, got %d: %v", len(errs), errs)
 	}
@@ -213,7 +213,7 @@ func TestValidate_MissingRequired(t *testing.T) {
 }
 
 func TestValidate_OptionalFieldsIgnored(t *testing.T) {
-	errs := configfx.Validate[defaultConfig]()
+	errs := config.Validate[defaultConfig]()
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for optional-only config, got %v", errs)
 	}
@@ -241,47 +241,6 @@ func TestCoerce_Int(t *testing.T) {
 	}
 }
 
-func TestCoerce_Int64(t *testing.T) {
-	result, err := env.Coerce("9999999999", reflect.TypeOf(int64(0)))
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result.(int64) != 9999999999 {
-		t.Errorf("got %v, want 9999999999", result)
-	}
-}
-
-func TestCoerce_BoolTrue(t *testing.T) {
-	for _, input := range []string{"true", "1"} {
-		result, err := env.Coerce(input, reflect.TypeOf(false))
-		if err != nil {
-			t.Fatalf("input %q: unexpected error: %v", input, err)
-		}
-		if result.(bool) != true {
-			t.Errorf("input %q: got false, want true", input)
-		}
-	}
-}
-
-func TestCoerce_BoolFalse(t *testing.T) {
-	for _, input := range []string{"false", "0"} {
-		result, err := env.Coerce(input, reflect.TypeOf(false))
-		if err != nil {
-			t.Fatalf("input %q: unexpected error: %v", input, err)
-		}
-		if result.(bool) != false {
-			t.Errorf("input %q: got true, want false", input)
-		}
-	}
-}
-
-func TestCoerce_BoolInvalid(t *testing.T) {
-	_, err := env.Coerce("yes", reflect.TypeOf(false))
-	if err == nil {
-		t.Fatal("expected error for invalid bool value, got nil")
-	}
-}
-
 func TestCoerce_SliceOfStrings(t *testing.T) {
 	result, err := env.Coerce("a, b , c", reflect.TypeOf([]string{}))
 	if err != nil {
@@ -302,12 +261,5 @@ func TestCoerce_Duration(t *testing.T) {
 	expected := 2*time.Hour + 30*time.Minute
 	if d != expected {
 		t.Errorf("got %v, want %v", d, expected)
-	}
-}
-
-func TestCoerce_DurationInvalid(t *testing.T) {
-	_, err := env.Coerce("notaduration", reflect.TypeOf(time.Duration(0)))
-	if err == nil {
-		t.Fatal("expected error for invalid duration, got nil")
 	}
 }

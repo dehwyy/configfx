@@ -1,4 +1,4 @@
-package configfx
+package config
 
 import (
 	"fmt"
@@ -42,7 +42,6 @@ func Load[T any]() (*T, error) {
 			} else if tag.Required {
 				return nil, fmt.Errorf("configfx: required env var %q is not set (field %s)", tag.Key, f.Name)
 			} else {
-				// optional, no default — leave zero value
 				continue
 			}
 		}

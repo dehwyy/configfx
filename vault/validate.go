@@ -18,7 +18,9 @@ type ValidationError struct {
 
 // Validate checks Vault connectivity and existence of all keys defined in T.
 // Returns a list of errors: connection failure OR missing keys.
-func Validate[T any](addr, token string) []ValidationError {
+func Validate[T any](addr, token string, opts ...LoadOption) []ValidationError {
+	cfg := newLoadConfig(opts)
+
 	client, err := vaultclient.New(vaultclient.WithAddress(addr))
 	if err != nil {
 		return []ValidationError{{
@@ -71,11 +73,7 @@ func Validate[T any](addr, token string) []ValidationError {
 	var errs []ValidationError
 
 	for key, refs := range pathFields {
-		resp, err := client.Secrets.KvV1Read(
-			ctx,
-			key.path,
-			vaultclient.WithMountPath(key.mount),
-		)
+		data, err := readPath(ctx, client, key, cfg.kvVersion)
 		if err != nil {
 			for _, ref := range refs {
 				errs = append(errs, ValidationError{
@@ -87,7 +85,6 @@ func Validate[T any](addr, token string) []ValidationError {
 			continue
 		}
 
-		data := resp.Data
 		for _, ref := range refs {
 			if _, ok := data[ref.tag.Field]; !ok {
 				errs = append(errs, ValidationError{

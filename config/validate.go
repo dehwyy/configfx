@@ -1,4 +1,4 @@
-package configfx
+package config
 
 import (
 	"os"
@@ -22,8 +22,6 @@ func Validate[T any]() []ValidationError {
 
 	if t.Kind() != reflect.Struct {
 		return []ValidationError{{
-			Field:   "",
-			EnvKey:  "",
 			Message: "Validate expects a struct type",
 		}}
 	}
@@ -38,11 +36,7 @@ func Validate[T any]() []ValidationError {
 		}
 
 		tag := env.ParseTag(tagStr)
-		if tag.Key == "" {
-			continue
-		}
-
-		if !tag.Required {
+		if tag.Key == "" || !tag.Required {
 			continue
 		}
 
