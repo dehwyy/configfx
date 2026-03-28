@@ -38,6 +38,7 @@ jobs:
           fetch-depth: 0
 
       - name: Bump patch version and push tag
+        id: tag
         run: |
           LATEST=$(git tag --sort=-v:refname | grep '^v[0-9]' | head -1)
           if [ -z "$LATEST" ]; then
@@ -51,3 +52,10 @@ jobs:
           echo "Tagging $NEW"
           git tag "$NEW"
           git push origin "$NEW"
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.version }}
+          generate_release_notes: true
