@@ -24,7 +24,15 @@ type pathKey struct {
 func Load[T any](addr, token string, opts ...LoadOption) (*T, error) {
 	cfg := newLoadConfig(opts)
 
-	client, err := vaultclient.New(vaultclient.WithAddress(addr))
+	clientOpts := []vaultclient.ClientOption{vaultclient.WithAddress(addr)}
+	if cfg.tlsSkipVerify {
+		clientOpts = append(
+			clientOpts,
+			vaultclient.WithTLS(vaultclient.TLSConfiguration{InsecureSkipVerify: true}),
+		)
+	}
+
+	client, err := vaultclient.New(clientOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("vault: failed to create client: %w", err)
 	}

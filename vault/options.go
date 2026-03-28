@@ -6,7 +6,8 @@ type LoadOption interface {
 }
 
 type loadConfig struct {
-	kvVersion int // 1 or 2
+	kvVersion     int // 1 or 2
+	tlsSkipVerify bool
 }
 
 func newLoadConfig(opts []LoadOption) loadConfig {
@@ -26,3 +27,11 @@ var OptionClientKv1 LoadOption = kvVersionOpt(1)
 
 // OptionClientKv2 uses Vault KV v2 API.
 var OptionClientKv2 LoadOption = kvVersionOpt(2)
+
+type tlsSkipVerifyOpt struct{}
+
+func (o tlsSkipVerifyOpt) applyLoad(c *loadConfig) { c.tlsSkipVerify = true }
+
+// OptionTLSSkipVerify disables TLS certificate verification.
+// Use when the Vault server uses a self-signed or internal CA certificate.
+var OptionTLSSkipVerify LoadOption = tlsSkipVerifyOpt{}
